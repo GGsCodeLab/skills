@@ -1,0 +1,24 @@
+{
+  "name": "ggscodelab",
+  "version": "1.0.0",
+  "description": "Install AI agent skills from GGsCodeLab/skills into your project",
+  "type": "module",
+  "bin": {
+    "ggscodelab": "bin/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "skills",
+    "claude",
+    "cursor",
+    "ai",
+    "ggscodelab"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GGsCodeLab/skills.git"
+  }
+}
