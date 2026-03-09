@@ -8,8 +8,8 @@ async function main() {
   const subcommand = args[0];
 
   if (subcommand !== 'install-skill' && subcommand !== 'update-skill') {
-    console.error('Usage: npx ggscodelab install-skill <skill-name> --cursor | --claude');
-    console.error('       npx ggscodelab update-skill <skill-name> --cursor | --claude [--yes]');
+    console.error('Usage: npx ggscodelab install-skill <skill-name> --cursor | --claude | --copilot');
+    console.error('       npx ggscodelab update-skill <skill-name> --cursor | --claude | --copilot [--yes]');
     process.exit(1);
   }
 
@@ -19,7 +19,7 @@ async function main() {
   const flag = rest[2];
 
   if (!skillName || !flag) {
-    console.error(`Usage: npx ggscodelab ${subcommand} <skill-name> --cursor | --claude${subcommand === 'update-skill' ? ' [--yes]' : ''}`);
+    console.error(`Usage: npx ggscodelab ${subcommand} <skill-name> --cursor | --claude | --copilot${subcommand === 'update-skill' ? ' [--yes]' : ''}`);
     console.error(`Example: npx ggscodelab ${subcommand} dev-team-lead --cursor`);
     process.exit(1);
   }
@@ -29,8 +29,10 @@ async function main() {
     destDir = '.cursor/skills/' + skillName;
   } else if (flag === '--claude') {
     destDir = 'claude/' + skillName;
+  } else if (flag === '--copilot') {
+    destDir = '.github/skills/' + skillName;
   } else {
-    console.error('Specify either --cursor or --claude');
+    console.error('Specify --cursor, --claude, or --copilot');
     process.exit(1);
   }
 

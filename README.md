@@ -10,10 +10,12 @@ From any project directory:
 # Install (fails if folder exists)
 npx ggscodelab install-skill dev-team-lead --cursor
 npx ggscodelab install-skill dev-team-lead --claude
+npx ggscodelab install-skill dev-team-lead --copilot
 
 # Update (overwrites after confirmation; use --yes to skip prompt)
 npx ggscodelab update-skill dev-team-lead --cursor
 npx ggscodelab update-skill dev-team-lead --claude --yes
+npx ggscodelab update-skill dev-team-lead --copilot --yes
 ```
 
 The skill is downloaded from this repo. Skills live at the repo root (e.g. `dev-team-lead/`); only the install destination changes (`.cursor/skills/` or `claude/`).
