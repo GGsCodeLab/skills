@@ -16,7 +16,7 @@ npx ggscodelab update-skill dev-team-lead --cursor
 npx ggscodelab update-skill dev-team-lead --claude --yes
 ```
 
-The skill is downloaded from this repo. The `claude/` folder in this repo is the source of installable skills.
+The skill is downloaded from this repo. Skills live at the repo root (e.g. `dev-team-lead/`); only the install destination changes (`.cursor/skills/` or `claude/`).
 
 ## Publish the npx package
 

@@ -25,7 +25,7 @@ async function getContents(repo, filePath) {
   });
   if (!res.ok) {
     if (res.status === 404) {
-      throw new Error(`Skill not found: ${filePath}. Check that the repo has claude/${filePath.split('/')[1]}/`);
+      throw new Error(`Skill not found: ${filePath}. Check that the repo has this skill at the root.`);
     }
     throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
   }
@@ -60,7 +60,7 @@ async function downloadDir(repo, contentPath, destDir) {
 }
 
 export async function installSkill({ skillName, destDir, repo, skillsPath }) {
-  const contentPath = `${skillsPath}/${skillName}`;
+  const contentPath = skillsPath ? `${skillsPath}/${skillName}` : skillName;
   const cwd = process.cwd();
   const absoluteDest = path.resolve(cwd, destDir);
 
@@ -75,7 +75,7 @@ export async function installSkill({ skillName, destDir, repo, skillsPath }) {
 }
 
 export async function updateSkill({ skillName, destDir, repo, skillsPath, yes = false }) {
-  const contentPath = `${skillsPath}/${skillName}`;
+  const contentPath = skillsPath ? `${skillsPath}/${skillName}` : skillName;
   const cwd = process.cwd();
   const absoluteDest = path.resolve(cwd, destDir);
 

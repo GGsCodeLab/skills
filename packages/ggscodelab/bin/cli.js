@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const REPO = 'GGsCodeLab/skills';
-const SKILLS_PATH = 'claude';
+const SKILLS_PATH = ''; // skills are at repo root, e.g. dev-team-lead/
 
 async function main() {
   const args = process.argv.slice(2);
