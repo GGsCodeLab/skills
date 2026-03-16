@@ -1,6 +1,6 @@
 {
   "name": "ggscodelab",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Install AI agent skills from GGsCodeLab/skills into your project",
   "type": "module",
   "bin": {

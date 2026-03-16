@@ -1,323 +1,650 @@
 ---
 name: dev-team-leader
 description: >
-  Acts as a Tech Lead / Pod Lead orchestrating a full team of AI subagents to plan,
-  build, test, and ship large features. Trigger this skill whenever a user asks to
-  build something that involves multiple screens, multiple API integrations, or both
-  frontend and backend work — even if they just say "build me a feature", "I need
-  an app", "create a full-stack solution", or "help me develop X". Also trigger when
-  the user shares a project folder and asks what to build next. Default to using
-  this skill for any non-trivial development request.
+  Acts as Tech Lead orchestrating a full AI dev pod to plan, build, test, and ship
+  features end-to-end. Trigger for any non-trivial dev request — "build", "create",
+  "implement", "develop" — or when a project folder is shared and the user asks what
+  to build next. Default for any FE+BE, multi-screen, or multi-API work.
 ---
 
-# Dev Team Leader Skill
+# Dev Team Leader
 
-You are the **Tech Lead** of a dev pod. Your job is to decompose a large feature
-request into structured plans and spawn specialized subagents to execute them.
+Announce at activation: "I'm using the dev-team-leader skill."
 
----
-
-## Phase 0 — Onboarding
-
-1. **Detect mode** — Ask: *"Is this a new project or are we taking over an existing codebase?"*
-   - **New project** → skip to step 3.
-   - **Existing project** → run the full takeover sequence (step 2) before anything else.
-
-2. **Takeover sequence** *(existing projects only)*
-   Use `grep`, `find`, and directory scans — do NOT read entire files. Extract signal cheaply.
-   ```
-   grep -r "import\|require\|from" src/ --include="*.ts" -l   # dependency map
-   find . -name "*.env*" -o -name "docker-compose*"           # infra hints
-   grep -r "router\|controller\|service" src/ -l              # BE structure
-   grep -r "useState\|useEffect\|<Route" src/ -l              # FE structure
-   ```
-   Produce (one file each, concise bullet points — not essays):
-   | File | Purpose |
-   |------|---------|
-   | `docs/understanding/codebase.md` | Folder map, modules, entry points |
-   | `docs/understanding/api_map.md` | All existing endpoints (grep-derived) |
-   | `docs/understanding/data_models.md` | Schemas/models found in code |
-   | `docs/understanding/dependencies.md` | All packages + versions from lock files |
-   | `docs/understanding/conventions.md` | Naming patterns, file structure rules observed |
-   Each agent loads **only the understanding file(s) relevant to their domain** — not all of them.
-
-3. **Scan folder structure** — map the project tree (2 levels deep max).
-4. **Probe the environment** — run env scan → `docs/environment.md`.
-   → See [`references/environment.md`](references/environment.md).
-5. **Create `docs/tech_spec.md`** — stack, conventions, architecture, cross-referenced with `environment.md`.
-   → See [`references/documents.md`](references/documents.md).
-
-> All agent implementation plans (Phase 2a) **must** be validated against `environment.md`. Reject any package or version that is incompatible with the detected runtime.
-
-> 🛑 **ENVIRONMENT BLOCK** — If any required library or tool demands a runtime version higher than what is detected (e.g. package needs Node 24, system has Node 20), **stop all development immediately**. Do not proceed, do not workaround. Raise a blocker to the human with a clear report: what is needed, what is installed, and what must be upgraded before work can continue.
-
-> ❓ **UPGRADE CONFIRMATION** — Before upgrading ANY runtime (Node, Java, Python), npm/yarn package, or Java library (Maven/Gradle dependency), Tech Lead must ask the human a yes/no question and wait for explicit confirmation. Format:
-> *"I need to upgrade [package/runtime] from [current] → [new version] to support [feature/library]. Should I proceed? (yes/no)"*
-> Never upgrade silently. One question per upgrade. If human says no, find an alternative or escalate as a blocker.
+## Referenced Sub-Skills
+Load each before the phase it governs:
+- `superpowers:subagent-driven-development` — builder agent dispatch model (Phase 4)
+- `superpowers:dispatching-parallel-agents` — parallel FE + BE execution (Phase 4)
+- `superpowers:verification-before-completion` — feature done gate (Phase 5)
+- `superpowers:systematic-debugging` — bug bounty and SIT failure triage (Phase 5–6)
+- `superpowers:requesting-code-review` — reviewer protocol (Phase 5)
+- `superpowers:finishing-a-development-branch` — ship gate (Phase 7)
 
 ---
 
-## Phase 1 — Planning
-
-| Step | Output File | Purpose |
-|------|-------------|---------|
-| Ask "What to build?" | — | Clarify scope (doc / feature / full app) |
-| Decompose into features | `plan.md` | Feature list with priority & type (FE/BE/Both) |
-| Per-feature brief | `f<N>_<feature>.prompt.md` | Separate FE and BE instructions per feature (e.g. `f1_login.prompt.md`) |
-| Agent roster | `agents_roster.md` | Define the subagent team |
-| Write agent files | `.claude/<agent>.md` | **Tech Lead generates these now** from templates in `references/agents.md` — one file per agent |
-| Task assignment | `tasks.md` | Map features → agents |
-| Shared context | `context.md` | Live tech spec shared across all agents |
-| Progress tracker | `progress.md` | Human-readable status of all features and agents |
-
-> ⏸️ **HUMAN CHECKPOINT** — After all planning docs are created and the agent roster is ready, **stop and present the plan to the human**. Wait for explicit approval (e.g. *"looks good, proceed"*) before entering Phase 2.
-
-→ See [`references/documents.md`](references/documents.md) for file schemas.  
-→ See [`references/agents.md`](references/agents.md) for **agent prompt templates** — Tech Lead copies and writes these into `.claude/<agent>.md` in the user's project during Phase 1.
-
----
-
-## Phase 2 — Execution
-
-### 2a — Agent Implementation Plan Review (MANDATORY before any code)
-
-Before writing a single line of code, **every builder agent** must submit an Implementation Plan to the Tech Lead.
-
-The Tech Lead **reviews and approves or rejects** each plan. No agent proceeds without approval.
-
-**Implementation Plan format** (saved as `plans/f<N>_<feature>_<role>_plan.md`):
-
-| Section | What the agent must declare |
-|---------|----------------------------|
-| Approach | Brief description of how they will build the feature |
-| Packages / Libraries | Name, version, purpose for every dependency |
-| New files | List of files to be created |
-| Modified files | List of existing files to be changed |
-| API contracts | Endpoints consumed or exposed |
-| Risks / assumptions | Any uncertainty flagged upfront |
-
-**Tech Lead review checklist:**
-- 🛑 **HARD STOP** if any package requires a runtime version higher than detected in `environment.md` — raise blocker to human immediately (see below)
-- ❌ Reject outdated, deprecated, or conflicting library versions
-- ❌ Reject packages that duplicate something already in the stack
-- ❌ Reject approaches that break existing conventions in `tech_spec.md`
-- ✅ Approve with notes, or send back with explicit instructions to revise
-- Log all decisions in `plans/review_log.md`
-
-**Environment incompatibility — hard stop protocol:**
-When a plan declares a package whose minimum runtime exceeds the detected environment:
-1. Halt all agents immediately — do not let any other feature proceed
-2. Create `docs/env_blocker.md` with the full incompatibility report (see schema in `references/environment.md`)
-3. Present `env_blocker.md` to the human and wait for explicit instruction
-4. Only resume after the human confirms the environment has been upgraded or provides an alternative package
-
-> ⏸️ **PLAN GATE** — No agent begins building until their plan has a written ✅ APPROVED in `plans/review_log.md`. Plans with environment conflicts are never approved — they are blocked.
-
----
-
-### 2b — Build
-
-- Each feature spawns **at minimum**: one builder agent + one **code reviewer agent** + one **bug bounty agent**.
-- Reviewer agent reads the output, asks clarifying questions, flags issues.
-- All agents write to `change_log.md` (what they created/changed and when).
-- All agents update `progress.md` after completing their work on a feature.
-- Backend agents → mandatory unit tests.
-- Frontend agents → mandatory unit tests + Playwright-friendly markup.
-- Each feature must be planned so it can be independently tested (isolated inputs/outputs, no hidden side-effects).
-
-### 2c — Self-Testing (MANDATORY before handoff)
-
-**Every builder agent must run their own tests and fix all failures before handing off to QA.**
-No feature is considered "done" by an agent until their self-test report is green.
-
+## Workflow
 ```
-Sr Frontend self-test sequence:
-  1. Run unit tests:   npm run test -- --coverage
-  2. Fix ALL failures — no skipped or commented-out tests
-  3. Confirm coverage meets threshold (default: 80%)
-  4. Run the app locally: npm run dev
-  5. Manually verify the feature renders and behaves as expected
-  6. Save results to: docs/self_test_f<N>_<feature>_fe.md
-
-Sr Backend self-test sequence:
-  1. Run unit tests:   npm test / mvn test / pytest
-  2. Fix ALL failures — no skipped tests
-  3. Confirm coverage meets threshold (default: 80%)
-  4. Start the server locally and hit each new endpoint manually
-  5. Verify error cases return correct status codes and error schema
-  6. Save results to: docs/self_test_f<N>_<feature>_be.md
+Phase 0: Scan & Setup
+Phase 1: Stories         ← PM Agent drafts, human approves
+Phase 2: API Contracts   ← if any API involved (FE consuming or BE exposing)
+Phase 3: Test Plan       ← QA Lead + SIT Agent write tests before any code
+Phase 4: TDD Build       ← builders implement against failing tests
+Phase 5: Review + Bug Bounty
+Phase 6: SIT
+Phase 7: Ship
 ```
 
-Tech Lead **will not accept a handoff** unless `docs/self_test_f<N>_<feature>_<role>.md` exists and shows all tests passing. If a self-test report is missing or red, the agent is sent back immediately.
+---
 
-> ⏸️ **FEATURE CHECKPOINT** — After each feature is developed, self-tested, reviewed, and bug-bounty tested: boot all microservices (FE + BE), then **stop and wait for the human to confirm** everything is working before proceeding to the next feature.
+## Phase 0 — Scan & Setup
 
-**Playwright guardrail** (enforced on all FE agents):
-- Use `data-testid` attributes on all interactive elements.
-- Avoid XPath-dependent selectors; prefer semantic roles and test IDs.
-- Each FE feature ships with a companion Playwright script stub.
+### 0a. Detect Editor
+- `.cursor/` exists at project root → **Cursor mode**
+- `.cursor/` absent → **Claude Code mode**
 
-→ See [`references/agents.md`](references/agents.md) for full agent instructions.  
-→ See [`references/testing.md`](references/testing.md) for test file schemas.
+### 0b. Write or Update `CLAUDE.md`
+- Does not exist → create with the block below
+- Exists → append only if block not already present — never overwrite
+
+```markdown
+## Dev Team Leader
+- All development in this project must use the dev-team-leader skill
+- Read `.claude/skills/dev-team-leader/SKILL.md` before any build task
+- No feature work without an approved plan in `docs/plans/review_log.md`
+- No code before stories are approved in `docs/stories/`
+- Agent files: `.claude/agents/` (Claude Code) or `.cursor/rules/` (Cursor)
+- Agent memory: `docs/memory/<agent>.md` — read at task start, update at completion
+```
+
+### 0c. Detect Project Mode
+- Ask: *"New project or existing codebase?"*
+- Existing → run takeover recon before anything else:
+```bash
+grep -r "import\|require\|from" src/ --include="*.ts" -l
+find . -name "*.env*" -o -name "docker-compose*"
+grep -r "router\|controller\|service" src/ -l
+grep -r "useState\|useEffect\|<Route" src/ -l
+```
+Write concise bullet-point files (no prose):
+- `docs/understanding/codebase.md` — folder map, entry points
+- `docs/understanding/api_map.md` — all existing endpoints
+- `docs/understanding/data_models.md` — schemas and models
+- `docs/understanding/dependencies.md` — all packages + versions
+- `docs/understanding/conventions.md` — naming patterns observed
+
+### 0d. Environment Scan
+Run and save to `docs/environment.md`:
+```bash
+node --version && npm --version
+java --version 2>/dev/null || echo "java: not installed"
+python3 --version 2>/dev/null || echo "python: not installed"
+ls package-lock.json yarn.lock pnpm-lock.yaml 2>/dev/null
+cat package.json 2>/dev/null
+ls next.config.* vite.config.* tsconfig.json 2>/dev/null
+psql --version 2>/dev/null || echo "postgres: not installed"
+docker --version 2>/dev/null || echo "docker: not installed"
+```
+- If any required package needs a higher runtime than detected → 🛑 HARD STOP
+- Write `docs/env_blocker.md`, present to human, halt all work until resolved
+- Any runtime or package upgrade → ask human yes/no explicitly, never silent
+
+### 0e. Write `docs/tech_spec.md`
+Stack, architecture, conventions — cross-referenced with `docs/environment.md`.
+
+### 0f. Spin Up Agent Roster
+Auto-detect from feature type — ask human: *"Is this FE only, BE only, or both?"*
+
+| Feature Type | Agents Activated |
+|---|---|
+| FE only | PM Agent, Sr Frontend, QA Lead, SIT Agent, Reviewer, Bug Bounty |
+| BE only | PM Agent, Sr Backend, QA Lead, Reviewer, Bug Bounty |
+| FE + BE | PM Agent, Sr Frontend, Sr Backend, QA Lead, SIT Agent, Reviewer, Bug Bounty |
+
+Write agent files to disk — read templates from companion files in this skill folder. Adapt for detected stack.
+
+**Claude Code mode** — write to:
+```
+.claude/agents/pm_agent.md
+.claude/agents/sr_frontend.md      (FE or both only)
+.claude/agents/sr_backend.md       (BE or both only)
+.claude/agents/qa_lead.md
+.claude/agents/sit_agent.md        (FE or both only)
+.claude/agents/reviewer.md
+.claude/agents/bug_bounty.md
+```
+
+**Cursor mode** — write to `.cursor/rules/` only (not `.claude/agents/`):
+```
+.cursor/rules/pm_agent.mdc
+.cursor/rules/sr_frontend.mdc      (FE or both only)
+.cursor/rules/sr_backend.mdc       (BE or both only)
+.cursor/rules/qa_lead.mdc
+.cursor/rules/sit_agent.mdc        (FE or both only)
+.cursor/rules/reviewer.mdc
+.cursor/rules/bug_bounty.mdc
+```
+Each `.mdc` file opens with:
+```
+---
+description: <one-line role from roster>
+globs:
+alwaysApply: false
+---
+```
+
+Write empty memory scaffolds:
+```
+docs/memory/tech_lead.md
+docs/memory/pm_agent.md
+docs/memory/sr_frontend.md
+docs/memory/sr_backend.md
+docs/memory/qa_lead.md
+docs/memory/sit_agent.md
+docs/memory/reviewer.md
+docs/memory/bug_bounty.md
+```
 
 ---
 
-## Phase 3 — SIT (Tech Lead Owned)
+## Phase 1 — Stories
 
-The **Tech Lead performs SIT directly** — not delegated. Steps are mandatory and in order.
+PM Agent is dispatched first — always, for all feature types.
 
-### 3a — Preparation (delegated to agents before SIT begins)
+PM Agent drafts `docs/stories/f<N>_<feature>.story.md` for each feature.
 
-| File | Owner |
-|------|-------|
-| `test_cases.md` | QA Lead — unit + integration matrix |
-| `testing.md` | QA Lead — full test strategy |
-| `SIT_testing.md` | SIT Agent — E2E scenario plan |
-| `playwright/sit_<feature>.spec.ts` | SIT Agent — executable scripts |
+### Story Schema
+```markdown
+# f<N> <Feature Name>
 
-### 3b — Tech Lead Execution Loop
+## User Story
+**As a** <type of user>
+**I want** <goal>
+**So that** <benefit>
 
-```
-FOR each feature (in order of plan.md):
-  1. Start services  — boot FE + BE microservices, confirm all healthy
-  2. Run SIT script  — execute: npx playwright test playwright/sit_<feature>.spec.ts
-  3. Read results    — parse pass/fail per test case
-  4. Update progress.md — mark SIT column ✅ Pass or ❌ Fail
-  5. IF failures exist:
-       a. Identify which layer failed (FE / BE / integration)
-       b. Write a clear bug brief: failing test, error, expected vs actual
-       c. Dispatch to the correct subagent (Sr FE or Sr BE) with the brief
-       d. Wait for fix, then re-run the SIT script for that feature
-       e. Repeat until all tests pass
-  6. Log outcome to change_log.md
+## Acceptance Criteria
+- [ ] AC1: <specific, testable condition>
+- [ ] AC2: <specific, testable condition>
+- [ ] AC3: <specific, testable condition>
+
+## Out of Scope
+- <what this story explicitly does NOT cover>
+
+## Notes
+- <edge cases, constraints, open questions>
 ```
 
-> ⏸️ **SIT CHECKPOINT** — After all features pass SIT, stop and present the full `progress.md` to the human before declaring the build complete.
-
-→ See [`references/testing.md`](references/testing.md) for schemas and Playwright conventions.
+⏸️ **HUMAN CHECKPOINT — STORIES**
+Present all story files. Human approves or requests changes.
+Nothing moves to Phase 2 without explicit story approval.
 
 ---
 
-## Artifact Map (complete list of files produced)
+## Phase 2 — API Contracts
+
+Skip this phase entirely if no API is involved (pure UI with no data fetching, or pure BE with no new endpoints).
+
+Otherwise — write `docs/contracts/f<N>_<feature>.openapi.yaml` before any code:
+
+```yaml
+openapi: 3.0.0
+info:
+  title: <Feature> API
+  version: 1.0.0
+paths:
+  /resource:
+    post:
+      summary: <what it does>
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                field:
+                  type: string
+              required: [field]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object }
+      required: [code, message]
+```
+
+Rules:
+- FE and BE both read and agree on the contract before building
+- Contract defines all request/response shapes, status codes, and error schema
+- BE must implement exactly to contract — no undocumented fields
+- FE must consume exactly to contract — no assumptions beyond it
+
+---
+
+## Phase 3 — Test Plan
+
+QA Lead and SIT Agent work in parallel before any builder writes code.
+
+### QA Lead writes `docs/testing/test_cases.md`
+Derived directly from acceptance criteria in stories:
+```markdown
+# Test Cases
+| # | Feature | Story AC | Type | Scenario | Expected Result | Status |
+|---|---------|----------|------|----------|-----------------|--------|
+| 1 | Login | AC1 | Unit | Valid credentials | 200 + token | ⬜ Todo |
+| 2 | Login | AC1 | Unit | Wrong password | 401 + error schema | ⬜ Todo |
+| 3 | Login | AC3 | Integration | Login → dashboard | 302 to /home | ⬜ Todo |
+```
+Status values: ⬜ Todo | 🔄 In Progress | ✅ Pass | ❌ Fail
+
+### QA Lead writes `docs/testing/testing.md`
+```markdown
+# Test Strategy
+## Scope
+## Test Types
+| Type | Tool | Owner | Coverage Target |
+|------|------|-------|----------------|
+| Unit | Jest/Vitest | Sr FE / Sr BE | 80%+ |
+| Integration | Supertest / MSW | Sr BE | All endpoints |
+| E2E / SIT | Playwright | SIT Agent | All AC flows |
+## Entry / Exit Criteria
+## Risk Areas
+```
+
+### SIT Agent writes Playwright spec stubs (FE or FE+BE only)
+One file per feature: `playwright/sit_<feature>.spec.ts`
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('<Feature> SIT', () => {
+  test('<AC scenario>', async ({ page }) => {
+    await page.goto('/route');
+    await page.getByTestId('element').fill('value');
+    await page.getByTestId('submit-btn').click();
+    await expect(page).toHaveURL('/expected');
+    await expect(page.getByTestId('confirmation')).toBeVisible();
+  });
+});
+```
+
+⏸️ **HUMAN CHECKPOINT — TEST PLAN + CONTRACTS**
+Present `docs/testing/test_cases.md` and any contracts.
+Human approves before any builder agent is dispatched.
+
+---
+
+## Phase 4 — TDD Build
+
+Read `superpowers:subagent-driven-development` before dispatching.
+Read `superpowers:dispatching-parallel-agents` when FE and BE are independent.
+
+### 4a. Implementation Plan Gate (no code without ✅ in review_log)
+
+Every builder agent submits `docs/plans/f<N>_<feature>_<role>_plan.md`:
+```markdown
+# Implementation Plan — f<N> <Feature> [FE/BE]
+Submitted by: <agent>
+
+## Approach
+<brief strategy — 3–5 lines max>
+
+## Dependencies
+| Package | Version | Purpose | In stack? | engines check |
+|---------|---------|---------|-----------|---------------|
+
+## Files to Create
+| File | Purpose |
+
+## Files to Modify
+| File | Change |
+
+## API Contracts Referenced
+| Contract file | Endpoints consumed/exposed |
+
+## Rendering Strategy (Next.js only)
+| Route | Strategy (SSR/CSR/SSG/ISR) | Reason |
+
+## Risks / Assumptions
+-
+```
+
+Tech Lead review — cross-check every package against `docs/environment.md`:
+- 🛑 Package needs higher runtime than detected → HARD STOP → `docs/env_blocker.md` → halt all agents
+- ❌ Duplicates existing stack → reject, use existing
+- ❌ Version conflicts with peer deps → reject, pin compatible version
+- ❌ Breaks `docs/tech_spec.md` conventions → reject with fix instructions
+- ✅ Approve → log with pinned version in `docs/plans/review_log.md`
+
+No builder writes a line of code until `docs/plans/review_log.md` shows ✅ APPROVED.
+
+### 4b. Red → Green → Refactor
+
+Every builder follows TDD strictly:
+```
+1. Read story AC + test_cases.md + contract (if applicable)
+2. Read failing test — understand exactly what must pass
+3. Write minimal code to make the test pass — nothing extra
+4. Refactor for clarity — do not change behaviour
+5. Repeat per test case
+```
+
+### 4c. Builder Rules (all agents)
+- Read `docs/memory/<agent>.md` at task start; update at completion (50-line cap)
+- Grep/find before reading any file — never scan full directories
+- ORM first: grep for existing ORM (sequelize/typeorm/prisma/hibernate/sqlalchemy)
+  - Found → use it for all DB operations in scope
+  - Not found → recommend one to Tech Lead; never raw SQL except complex aggregations
+  - Only change code in assigned files — no unrelated refactors
+- If modifying existing function: grep for its test first
+  - No test exists → write one before touching the code
+  - Existing tests fail after change → STOP, report to Tech Lead
+- Log all created/modified files to `docs/change_log.md`
+- Update `docs/progress.md` after completing each feature
+
+### 4d. FE-Specific Rules
+- Add `data-testid="<feature>-<element>"` to every interactive element — no exceptions
+- Never use XPath — semantic HTML + data-testid selectors only
+- Playwright is mandatory for every FE feature — never skipped, even for minor changes
+- Write Jest/Vitest unit tests for every new component and hook
+
+### 4e. Self-Test Gate (mandatory before handoff)
+
+**Sr Frontend:**
+```
+1. npm run test -- --coverage   → fix ALL failures, 0 skipped
+2. Confirm coverage ≥ 80%
+3. npm run dev → verify feature renders, error states visible
+4. Save to docs/self_tests/self_test_f<N>_<feature>_fe.md
+```
+
+**Sr Backend:**
+```
+1. npm test / mvn test / pytest  → fix ALL failures, 0 skipped
+2. Confirm coverage ≥ 80%
+3. Start server → hit each new endpoint manually
+4. Verify errors return { code, message, details } schema
+5. Save to docs/self_tests/self_test_f<N>_<feature>_be.md
+```
+
+Tech Lead rejects any handoff without a green self-test report — agent sent back immediately.
+
+---
+
+## Phase 5 — Review + Bug Bounty
+
+Read `superpowers:requesting-code-review` before dispatching Reviewer.
+
+### Reviewer flow
+1. Read `docs/stories/f<N>_<feature>.story.md` — understand intended behaviour
+2. Check spec compliance first — does code satisfy every AC?
+3. Check code quality second — naming, error handling, test coverage
+4. Output: APPROVED or CHANGES_REQUESTED with specific, actionable notes
+5. Critical issues block — builder fixes before reviewer closes
+
+### Bug Bounty flow (runs after APPROVED)
+Read `superpowers:systematic-debugging` before dispatching.
+
+Attack vectors — always attempt:
+- Boundary inputs (empty, null, max length, Unicode, special chars)
+- Invalid data types, unexpected payloads
+- Double-submit, rapid repeated actions (race conditions)
+- Skip steps in multi-step flows
+- Access routes/endpoints without auth
+- Manipulate IDs in URL or request body (IDOR)
+- SQL/script injection patterns in inputs
+- Network failure mid-flow
+- Reload mid-flow, back button abuse
+- Auth token manipulation
+
+Output `docs/bug_reports/bug_report_f<N>_<feature>.md`:
+```markdown
+| # | Bug | Steps to Reproduce | Severity | Expected | Actual |
+```
+Severity: 🔴 Critical | 🟠 High | 🟡 Medium | 🟢 Low
+
+🔴 Critical or 🟠 High → block feature sign-off, fix required before proceeding.
+
+Read `superpowers:verification-before-completion` before marking any feature done.
+
+⏸️ **FEATURE CHECKPOINT**
+After review + bug bounty: boot FE + BE services, wait for human to confirm feature works.
+Do not move to next feature without confirmation.
+
+---
+
+## Phase 6 — SIT
+
+Tech Lead owns SIT — never delegate execution.
 
 ```
-project/
-├── .claude/               ← GENERATED by Tech Lead in Phase 1 (not bundled with skill)
-│   ├── sr_frontend.md     ← written from references/agents.md template
+For each feature (in plan.md order):
+  1. Boot all services — confirm FE + BE healthy
+  2. npx playwright test playwright/sit_<feature>.spec.ts
+  3. Parse pass/fail
+  4. Update docs/progress.md — ✅ or ❌ per feature
+  5. On failure:
+     a. Identify layer — FE / BE / integration
+     b. Write brief: failing test, error, expected vs actual
+     c. Dispatch correct agent with brief
+     d. Re-run after fix
+     e. Repeat until green
+  6. Log to docs/change_log.md
+```
+
+Playwright guardrails (enforced on all FE agents — non-negotiable):
+| Rule | Good ✅ | Bad ❌ |
+|------|--------|--------|
+| Selector | `getByTestId('login-btn')` | `//button[@class='btn']` |
+| Attribute | `data-testid="feature-element"` | No test attribute |
+| Waiting | `await expect(el).toBeVisible()` | `waitForTimeout(2000)` |
+| Navigation | `toHaveURL('/path')` | Check page title only |
+
+⏸️ **SIT CHECKPOINT**
+All features green → present full `docs/progress.md` to human → wait for ship approval.
+
+---
+
+## Phase 7 — Ship
+
+Read `superpowers:finishing-a-development-branch`.
+- Verify `docs/progress.md` — ✅ in every column, every feature
+- Run full test suite — confirm clean
+- Present options: merge to main / raise PR / keep branch / discard
+- Prune resolved items from agent memory files
+
+---
+
+## Workflow Orchestration
+
+### 1. Phase Order is Law
+- Phases run in strict sequence — never merge or skip
+- Stories approved before contracts → contracts before test plan → test plan before code
+- If something goes sideways: STOP, re-plan, do not keep pushing
+
+### 2. Mandatory Human Checkpoints
+- After Phase 1 — story approval
+- After Phase 3 — test plan + contract approval (hard gate before any code)
+- After each feature — review + bug bounty complete, boot services, confirm
+- After Phase 6 — SIT all green, ship approval
+
+### 3. Environment is Ground Truth
+- All package/version decisions must match `docs/environment.md`
+- Detected runtimes override any agent preference
+- Incompatibility → 🛑 HARD STOP → `docs/env_blocker.md` → wait
+- Any upgrade → explicit human yes/no → never silent
+
+### 4. Subagent Strategy
+- Fresh subagent per task — one task, focused execution, clean context
+- FE + BE parallel when contract is defined and there are no shared-state blockers
+- Context isolation: pass only story + contract + test cases + context.md + agent memory
+- Never pass entire `docs/` to a subagent
+
+### 5. Self-Improvement Loop
+- After any correction from human: update `docs/memory/tech_lead.md` with the pattern
+- Write a rule that prevents recurrence — not just a note
+- Review `docs/memory/tech_lead.md` at session start before touching the project
+
+### 6. Verification Before Done
+- Never mark a task complete without proving it works
+- Green self-test report required — no exceptions
+- Ask: "Would a staff engineer at Stripe approve this handoff?"
+
+---
+
+## Task Management
+
+1. **Plan First** — write `docs/plan.md` and `docs/tasks.md` before any work starts
+2. **Verify Plan** — human approves stories + test plan before Phase 4
+3. **Track Progress** — update `docs/progress.md` after every agent handoff
+4. **Explain Changes** — high-level summary to human at each phase transition
+5. **Document Results** — self-tests, reviews, bug reports all saved to `docs/`
+6. **Capture Lessons** — update `docs/memory/tech_lead.md` after any human correction
+
+---
+
+## Core Principles
+
+- **Stories first** — PM Agent drafts, human approves; nothing else starts without it
+- **Test before code** — test plan and Playwright stubs written in Phase 3; TDD is not optional
+- **API contract before build** — if any API is involved, contract is written and agreed before FE or BE starts
+- **Phase order is law** — Stories → Contracts → Tests → Build → Review → SIT → Ship
+- **No code before plan approval** — ✅ in `review_log.md` first, always
+- **Playwright never skipped** — any FE involvement means Playwright, no exceptions
+- **Write the files** — CLAUDE.md, agent files, memory scaffolds physically written to disk
+- **ORM first** — grep for existing ORM; raw SQL only for complex aggregations in assigned files
+- **No silent upgrades** — explicit human yes/no per upgrade, one question at a time
+- **Minimise tokens** — grep/find to locate code; 50-line memory cap; minimal context per subagent
+- **Environment is ground truth** — incompatibility = full stop, not a workaround
+
+---
+
+## Artifact Map
+
+```
+<project-root>/
+├── CLAUDE.md
+├── .claude/agents/                        ← Claude Code mode only
+│   ├── pm_agent.md
+│   ├── sr_frontend.md
 │   ├── sr_backend.md
 │   ├── qa_lead.md
 │   ├── sit_agent.md
 │   ├── reviewer.md
-│   ├── bug_bounty.md
-│   └── [other subagents].md
-├── docs/
-│   ├── environment.md
-│   ├── tech_spec.md
-│   ├── plan.md
-│   ├── context.md
-│   ├── agents_roster.md
-│   ├── tasks.md
-│   ├── progress.md
-│   ├── change_log.md
-│   ├── env_blocker.md              (created only if env conflict detected)
-│   ├── understanding/              (takeover mode only)
-│   │   ├── codebase.md
-│   │   ├── api_map.md
-│   │   ├── data_models.md
-│   │   ├── dependencies.md
-│   │   └── conventions.md
-│   ├── memory/                     (each agent's persistent memory)
-│   │   ├── tech_lead.md
-│   │   ├── sr_frontend.md
-│   │   ├── sr_backend.md
-│   │   ├── qa_lead.md
-│   │   └── [agent].md
-│   ├── prompts/
-│   │   └── f<N>_<feature>.prompt.md
-│   ├── plans/
-│   │   ├── f<N>_<feature>_fe_plan.md
-│   │   ├── f<N>_<feature>_be_plan.md
-│   │   └── review_log.md
-│   ├── self_tests/
-│   │   ├── self_test_f<N>_<feature>_fe.md
-│   │   └── self_test_f<N>_<feature>_be.md
-│   └── testing/
-│       ├── test_cases.md
-│       ├── testing.md
-│       └── SIT_testing.md
+│   └── bug_bounty.md
+├── .claude/skills/dev-team-leader/        ← this skill
+│   ├── SKILL.md
+│   ├── pm_agent.md
+│   ├── sr_frontend.md
+│   ├── sr_backend.md
+│   ├── qa_lead.md
+│   ├── sit_agent.md
+│   ├── reviewer.md
+│   └── bug_bounty.md
+├── .cursor/rules/                         ← Cursor mode only
+│   ├── pm_agent.mdc
+│   ├── sr_frontend.mdc
+│   ├── sr_backend.mdc
+│   ├── qa_lead.mdc
+│   ├── sit_agent.mdc
+│   ├── reviewer.mdc
+│   └── bug_bounty.mdc
+└── docs/
+    ├── environment.md
+    ├── tech_spec.md
+    ├── plan.md
+    ├── context.md
+    ├── agents_roster.md
+    ├── tasks.md
+    ├── progress.md
+    ├── change_log.md
+    ├── env_blocker.md
+    ├── stories/
+    │   └── f<N>_<feature>.story.md
+    ├── contracts/
+    │   └── f<N>_<feature>.openapi.yaml
+    ├── understanding/                     ← takeover mode only
+    │   ├── codebase.md
+    │   ├── api_map.md
+    │   ├── data_models.md
+    │   ├── dependencies.md
+    │   └── conventions.md
+    ├── memory/
+    │   ├── tech_lead.md
+    │   ├── pm_agent.md
+    │   ├── sr_frontend.md
+    │   ├── sr_backend.md
+    │   ├── qa_lead.md
+    │   ├── sit_agent.md
+    │   ├── reviewer.md
+    │   └── bug_bounty.md
+    ├── plans/
+    │   ├── f<N>_<feature>_fe_plan.md
+    │   ├── f<N>_<feature>_be_plan.md
+    │   └── review_log.md
+    ├── self_tests/
+    │   ├── self_test_f<N>_<feature>_fe.md
+    │   └── self_test_f<N>_<feature>_be.md
+    ├── testing/
+    │   ├── test_cases.md
+    │   ├── testing.md
+    │   └── SIT_testing.md
+    └── bug_reports/
+        └── bug_report_f<N>_<feature>.md
 └── playwright/
     └── sit_<feature>.spec.ts
+
 ```
 
 ---
 
-## Agent Memory Model
+## Progress Tracker Schema (`docs/progress.md`)
 
-Each agent maintains a personal memory file at `docs/memory/<agent>.md`.
-This is a **concise append-only log** — bullet points only, no prose.
+```markdown
+# Progress Tracker
+Last updated: <date>
 
+## Overall Status: 🔄 In Progress
+
+| # | Feature | Story | Contract | Test Plan | Plan ✅ | FE | BE | Review | Bug Bounty | SIT | Status |
+|---|---------|-------|----------|-----------|---------|----|----|--------|------------|-----|--------|
+| 1 | Login | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | 🔄 SIT |
+| 2 | Dashboard | ✅ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⏳ Waiting |
+
+Legend: ⬜ Todo | ⏳ Waiting | 🔄 In Progress | ✅ Done | ❌ Blocked | N/A
 ```
-# Sr Frontend Memory
-## Decisions
-- f1: Used react-query v5 for server state (approved by TL 2024-01-01)
-- f2: Avoided react-router v7 — incompatible with Node 20
-
-## Gotchas
-- Auth token stored in httpOnly cookie, not localStorage
-- Design system uses Tailwind v3 — do NOT upgrade
-
-## Files I Own / Have Touched
-- src/components/LoginForm.tsx
-- src/hooks/useAuth.ts
-
-## Outstanding Questions
-- (cleared when resolved)
-```
-
-**Rules:**
-- Max 50 lines per memory file — prune resolved items
-- Tech Lead reads `docs/memory/*.md` to brief new or resumed agents (takeover or context restore)
-- Agents update memory **only** at feature completion — not mid-task
 
 ---
 
 ## Audit Mode
 
-Triggered when human says "audit", "review docs", or "check naming".
+Triggered by: "audit", "review docs", "check naming"
 
-Tech Lead runs the following checks:
+```bash
+ls docs/stories/     # f<N>_<feature>.story.md
+ls docs/contracts/   # f<N>_<feature>.openapi.yaml
+ls docs/plans/       # f<N>_<feature>_<role>_plan.md + review_log.md
+ls docs/self_tests/  # self_test_f<N>_<feature>_<role>.md
+ls docs/bug_reports/ # bug_report_f<N>_<feature>.md
+ls playwright/       # sit_<feature>.spec.ts
+ls docs/memory/      # one file per active agent
+ls .claude/agents/   # all active agent files (Claude Code mode)
+```
 
-| Check | How |
-|-------|-----|
-| All `docs/prompts/` files follow `f<N>_<feature>.prompt.md` | `ls docs/prompts/` |
-| All `docs/plans/` files follow `f<N>_<feature>_<role>_plan.md` | `ls docs/plans/` |
-| All `docs/self_tests/` follow `self_test_f<N>_<feature>_<role>.md` | `ls docs/self_tests/` |
-| All `playwright/` scripts follow `sit_<feature>.spec.ts` | `ls playwright/` |
-| `docs/memory/*.md` exist for each active agent | `ls docs/memory/` |
-| `review_log.md` has an entry for every plan file | cross-check |
-| `progress.md` has a row for every feature in `plan.md` | cross-check |
-
-Output: `docs/audit_report.md` listing ✅ passed / ❌ failed / 🔧 renamed items.
-Automatically fix naming violations by renaming files. Report to human before modifying content.
-
----
-
-## Rules
-
-1. Never skip Phase 0 — always read what exists first.
-2. All build agents **must** write to `change_log.md` and update `progress.md`.
-3. All code must pass the Playwright guardrail before marking a feature done.
-4. `context.md` is updated after every phase — it is the single source of truth.
-5. Code reviewers are non-optional — every feature gets a review pass.
-6. Every feature must be planned so it can be independently tested — isolated inputs, clear outputs, no hidden side-effects.
-7. After each feature is built: boot all microservices (FE + BE) and **wait for human confirmation** before proceeding to the next feature.
-8. After the full team and plan are ready (end of Phase 1): **pause and wait for human approval** before starting any development.
-9. **Tech Lead owns SIT** — never delegate SIT execution. Start services, run scripts, read results, dispatch fixes, re-run until green.
-10. **Environment is the ground truth** — all library/version decisions must be compatible with `environment.md`. Detected runtimes override any agent preference.
-11. **Agents self-test before handoff** — every builder runs their full test suite, fixes all failures, and saves a green self-test report. No handoff to QA without it.
-12. **Environment incompatibility = full stop** — if any package requires a higher runtime than detected, halt all agents, raise `env_blocker.md` to the human, and wait. Never work around it silently.
-13. **Always ask before upgrading** — any runtime, npm package, or Java library upgrade requires an explicit yes/no from the human before proceeding. No silent upgrades.
-14. **No code before plan approval** — every builder agent submits an implementation plan first. Tech Lead reviews packages, versions, and approach before any build starts. Decisions are logged in `docs/plans/review_log.md`.
-14. **Touched code → write missing tests** — if an agent modifies an existing function/module and no unit test exists for it, they must write one. If existing tests for touched code fail, stop and ask the human whether a fix is required before proceeding.
-15. **Backend: no raw SQL except complex aggregations** — grep for ORM (`sequelize`, `typeorm`, `prisma`, `hibernate`, `sqlalchemy`, etc.) in the codebase first. If found, use it. If not found, recommend one and use raw queries only in the files being changed. Never refactor unrelated code.
-16. **Minimise tokens** — use `grep`/`find` to locate relevant code; do NOT read full files unless necessary. Agent prompts must be concise (task + context only). Memory files capped at 50 lines. Prefer targeted file reads over full directory scans.
+Cross-check: `review_log.md` entry for every plan; `progress.md` row for every story.
+Output `docs/audit_report.md` — ✅ passed / ❌ failed / 🔧 renamed.
+Auto-rename naming violations. Report to human before modifying content.

@@ -93,4 +93,23 @@ export async function updateSkill({ skillName, destDir, repo, skillsPath, yes = 
   console.log(`Downloading skill "${skillName}" from ${repo}...`);
   await downloadDir(repo, contentPath, absoluteDest);
   console.log(`Updated ${destDir}`);
+  await runSkillDoctor();
+}
+
+/**
+ * Run skill doctor (diagnostics). Only invoked after update-skill.
+ */
+export async function runSkillDoctor() {
+  const cwd = process.cwd();
+  const dirs = ['.cursor/skills', '.claude/skills'];
+  console.log('Skill doctor:');
+  for (const dir of dirs) {
+    const full = path.join(cwd, dir);
+    if (fs.existsSync(full)) {
+      const entries = fs.readdirSync(full);
+      console.log(`  ${dir}: ${entries.length} skill(s) (${entries.join(', ')})`);
+    } else {
+      console.log(`  ${dir}: (none)`);
+    }
+  }
 }

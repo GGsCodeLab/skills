@@ -28,7 +28,7 @@ async function main() {
   if (flag === '--cursor') {
     destDir = '.cursor/skills/' + skillName;
   } else if (flag === '--claude') {
-    destDir = 'claude/' + skillName;
+    destDir = '.claude/skills/' + skillName;
   } else if (flag === '--copilot') {
     destDir = '.github/skills/' + skillName;
   } else {
