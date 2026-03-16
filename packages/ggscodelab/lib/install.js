@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
+import { execSync } from 'child_process';
+import fetch from 'node-fetch';
 
 const GITHUB_API = 'https://api.github.com/repos';
 
@@ -59,6 +61,37 @@ async function downloadDir(repo, contentPath, destDir) {
   }
 }
 
+/**
+ * Ensure the superpowers skill repo is present alongside the target skill.
+ * - For Cursor installs:   .cursor/skills/superpowers
+ * - For Claude installs:   .claude/skills/superpowers
+ */
+async function ensureSuperpowers(destDir) {
+  const cwd = process.cwd();
+  const skillsRoot = path.resolve(cwd, path.dirname(destDir));
+  const superpowersDir = path.join(skillsRoot, 'superpowers');
+
+  // Only act when destDir is under a skills directory (cursor/claude modes)
+  if (!skillsRoot.endsWith(path.join('skills'))) {
+    return;
+  }
+
+  const repoUrl = 'https://github.com/obra/superpowers.git';
+
+  try {
+    if (fs.existsSync(superpowersDir)) {
+      // Update existing clone
+      execSync('git pull', { cwd: superpowersDir, stdio: 'ignore' });
+    } else {
+      // Fresh clone
+      fs.mkdirSync(skillsRoot, { recursive: true });
+      execSync(`git clone ${repoUrl} "${superpowersDir}"`, { stdio: 'ignore' });
+    }
+  } catch {
+    // Best-effort; do not fail the main install/update if superpowers clone fails
+  }
+}
+
 export async function installSkill({ skillName, destDir, repo, skillsPath }) {
   const contentPath = skillsPath ? `${skillsPath}/${skillName}` : skillName;
   const cwd = process.cwd();
@@ -72,6 +105,7 @@ export async function installSkill({ skillName, destDir, repo, skillsPath }) {
   console.log(`Downloading skill "${skillName}" from ${repo}...`);
   await downloadDir(repo, contentPath, absoluteDest);
   console.log(`Installed to ${destDir}`);
+  await ensureSuperpowers(destDir);
 }
 
 export async function updateSkill({ skillName, destDir, repo, skillsPath, yes = false }) {
@@ -94,6 +128,7 @@ export async function updateSkill({ skillName, destDir, repo, skillsPath, yes = 
   await downloadDir(repo, contentPath, absoluteDest);
   console.log(`Updated ${destDir}`);
   await runSkillDoctor();
+  await ensureSuperpowers(destDir);
 }
 
 /**
