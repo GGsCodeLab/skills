@@ -81,9 +81,11 @@ async function ensureSuperpowers(destDir) {
   try {
     if (fs.existsSync(superpowersDir)) {
       // Update existing clone
+      console.log("Updating superpowers...", superpowersDir);
       execSync('git pull', { cwd: superpowersDir, stdio: 'ignore' });
     } else {
       // Fresh clone
+      console.log("Installing superpowers...");
       fs.mkdirSync(skillsRoot, { recursive: true });
       execSync(`git clone ${repoUrl} "${superpowersDir}"`, { stdio: 'ignore' });
     }
@@ -128,7 +130,9 @@ export async function updateSkill({ skillName, destDir, repo, skillsPath, yes = 
   await downloadDir(repo, contentPath, absoluteDest);
   console.log(`Updated ${destDir}`);
   await runSkillDoctor();
+  console.log("Ensuring superpowers are present...");
   await ensureSuperpowers(destDir);
+  console.log("Done");
 }
 
 /**
